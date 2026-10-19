@@ -1,48 +1,69 @@
 package com.riokartus
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 
-suspend fun checkStock(orderId: Int): Boolean {
-    delay(500)
-    return orderId % 2 == 0
+fun task1() = runBlocking {
+    val potok1 = launch(Dispatchers.IO) {
+        println("Имя потока ${Thread.currentThread().name}")
+    }
+    val potok2 = launch(Dispatchers.Default) {
+        println("Имя потока ${Thread.currentThread().name}")
+    }
+    potok1.join()
+    potok2.join()
 }
 
-suspend fun checkPayment(orderId: Int): Boolean {
-    delay(800)
-    return orderId > 0
+suspend fun fetchData(): String = withContext(Dispatchers.IO) {
+    delay(1000)
+    "данные"
 }
 
-suspend fun checkAddress(orderId: Int): Boolean {
-    delay(300)
-    return orderId != 13
-}
+fun task3() {
+    runBlocking {
+        val job = launch {
+            var i = 0
+            while (isActive) {
+                println("Итерация ${i}")
+                delay(100)
+                i++
+            }
+        }
+        delay(350)
+        job.cancel()
+        println("Отменено")
 
-suspend fun processOrder(orderId: Int): String = coroutineScope {
-    val a = async { checkStock(orderId) }
-    val b = async { checkPayment(orderId) }
-    val v = async { checkAddress(orderId) }
-
-    val stock = a.await()
-    val payment = b.await()
-    val address = v.await()
-
-    if (stock && payment && address) {
-        "Заказ $orderId: OK"
-    } else {
-        "Заказ $orderId: FAIL (stock=$stock, payment=$payment, address=$address)"
     }
 }
 
-fun main() = runBlocking {
-    val start = System.currentTimeMillis()
+suspend fun task4() = supervisorScope {
+    launch {
+        delay(100)
+        throw RuntimeException("Упала 1")
+    }
+    launch {
+        delay(200)
+        println("Готово")
+    }
+}
 
-    println(processOrder(4))
-    println(processOrder(13))
-    println(processOrder(-1))
 
-    val end = System.currentTimeMillis()
-    println("Общее время: ${end - start} мс")
+fun main(): Unit = runBlocking {
+    task1()
+    println(fetchData())
+    task3()
+    try {
+        task4()
+    } catch (e: Exception) {
+        println("Поймали: ${e.message}")
+    }
+
 }
