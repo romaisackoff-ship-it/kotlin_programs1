@@ -1,14 +1,38 @@
 package com.riokartus
 
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-fun main() {
-    val name = "Kotlin" //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-    // to see how IntelliJ IDEA suggests fixing it.
-    println("Hello, " + name + "!")
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
-    for (i in 1..5) { //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-        // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-        println("i = $i")
-    }
+
+suspend fun fetchUsers(): String {
+    delay(1000)
+    return "пользователи "
+}
+suspend fun fetchPosts(): String{
+    delay(1500)
+    return "посты"
+}
+suspend fun fetchComments(): String {
+    delay(800)
+    return "комментарии"
+}
+fun main() = runBlocking {
+    val start = System.currentTimeMillis()
+    val a = async { fetchUsers() }
+    val b = async { fetchPosts() }
+    val v = async { fetchComments() }
+
+
+    val resultA = a.await()
+    val resultB = b.await()
+    val resultV = v.await()
+    val end = System.currentTimeMillis()
+
+
+    println("Пользователи: $resultA")
+    println("Посты: $resultB")
+    println("Комментарии: $resultV")
+    println(end - start)
 }
