@@ -1,69 +1,91 @@
 package com.riokartus
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.withContext
 
-fun task1() = runBlocking {
-    val potok1 = launch(Dispatchers.IO) {
-        println("Имя потока ${Thread.currentThread().name}")
+class ServerMonitor {
+    private val _currentCpu = MutableStateFlow(0)
+    val currentCpu: StateFlow<Int> = _currentCpu
+    fun updateCpu(value: Int) {
+        _currentCpu.value = value
     }
-    val potok2 = launch(Dispatchers.Default) {
-        println("Имя потока ${Thread.currentThread().name}")
-    }
-    potok1.join()
-    potok2.join()
 }
 
-suspend fun fetchData(): String = withContext(Dispatchers.IO) {
-    delay(1000)
-    "данные"
+class AlertSystem {
+    private val _alerts = MutableSharedFlow<String>()
+    val alerts: SharedFlow<String> = _alerts
+    suspend fun sendAlert(message: String) {
+        _alerts.emit(message)
+    }
 }
 
-fun task3() {
-    runBlocking {
-        val job = launch {
-            var i = 0
-            while (isActive) {
-                println("Итерация ${i}")
-                delay(100)
-                i++
+fun cpuMetrics(): Flow<Int> = flow {
+    for (i in 1..10) {
+        delay(200)
+        emit(i * 20)
+        println(Thread.currentThread().name)
+    }
+
+}.flowOn(Dispatchers.Default)
+
+fun highCpuMetrics(): Flow<Int> {
+    return cpuMetrics()
+        .map { it + 5 }
+        .filter { it > 50 }
+        .flowOn(Dispatchers.Default)
+}
+
+fun main() = runBlocking {
+    val alertSystem = AlertSystem()
+    val server = ServerMonitor()
+    launch { alertSystem.alerts.collect { println("ALERT: $it") }
+    }
+    delay(100)
+    alertSystem.sendAlert("CPU > 80%")
+    delay(100)
+    alertSystem.sendAlert("Memory > 90%")
+    launch { server.currentCpu.collect { println("CPU: $it") }
+    }
+    delay(100)
+    server.updateCpu(30)
+    delay(100)
+    server.updateCpu(100)
+    delay(100)
+    server.updateCpu(70)
+    delay(100)
+    server.updateCpu(100)
+    delay(100)
+    server.updateCpu(90)
+    delay(500)
+    highCpuMetrics().collect { println(it) }
+    delay(100)
+    val job = launch { highCpuMetrics().collect {
+            server.updateCpu(it)
+            if (it > 80) {
+                alertSystem.sendAlert("High CPU: $it%")
             }
         }
-        delay(350)
-        job.cancel()
-        println("Отменено")
-
     }
-}
-
-suspend fun task4() = supervisorScope {
-    launch {
-        delay(100)
-        throw RuntimeException("Упала 1")
-    }
-    launch {
-        delay(200)
-        println("Готово")
-    }
+    job.join()
 }
 
 
-fun main(): Unit = runBlocking {
-    task1()
-    println(fetchData())
-    task3()
-    try {
-        task4()
-    } catch (e: Exception) {
-        println("Поймали: ${e.message}")
-    }
 
-}
+
+
+
+
+
+
+
