@@ -1,91 +1,116 @@
 package com.riokartus
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import com.riokartus.Users.id
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 
-class ServerMonitor {
-    private val _currentCpu = MutableStateFlow(0)
-    val currentCpu: StateFlow<Int> = _currentCpu
-    fun updateCpu(value: Int) {
-        _currentCpu.value = value
-    }
-}
+@Serializable
+data class User(val id: Int, val name: String)
 
-class AlertSystem {
-    private val _alerts = MutableSharedFlow<String>()
-    val alerts: SharedFlow<String> = _alerts
-    suspend fun sendAlert(message: String) {
-        _alerts.emit(message)
-    }
-}
+fun main() {
+    connectToDatabase()   // подключаемся к БД
+    setupDatabase()
+    printUsers()
 
-fun cpuMetrics(): Flow<Int> = flow {
-    for (i in 1..10) {
-        delay(200)
-        emit(i * 20)
-        println(Thread.currentThread().name)
-    }
+    embeddedServer(Netty, port = 8081, host = "0.0.0.0") {
+        install(ContentNegotiation) { json() }
+        install(StatusPages) {}
+        routing {
+            get("/users/{id}") {
+                val id = call.parameters["id"]?.toIntOrNull()
 
-}.flowOn(Dispatchers.Default)
+                if (id == null) {
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@get
+                }
 
-fun highCpuMetrics(): Flow<Int> {
-    return cpuMetrics()
-        .map { it + 5 }
-        .filter { it > 50 }
-        .flowOn(Dispatchers.Default)
-}
+                val user = transaction {
+                    Users.selectAll().where { Users.id eq id }.firstOrNull()
+                }
 
-fun main() = runBlocking {
-    val alertSystem = AlertSystem()
-    val server = ServerMonitor()
-    launch { alertSystem.alerts.collect { println("ALERT: $it") }
-    }
-    delay(100)
-    alertSystem.sendAlert("CPU > 80%")
-    delay(100)
-    alertSystem.sendAlert("Memory > 90%")
-    launch { server.currentCpu.collect { println("CPU: $it") }
-    }
-    delay(100)
-    server.updateCpu(30)
-    delay(100)
-    server.updateCpu(100)
-    delay(100)
-    server.updateCpu(70)
-    delay(100)
-    server.updateCpu(100)
-    delay(100)
-    server.updateCpu(90)
-    delay(500)
-    highCpuMetrics().collect { println(it) }
-    delay(100)
-    val job = launch { highCpuMetrics().collect {
-            server.updateCpu(it)
-            if (it > 80) {
-                alertSystem.sendAlert("High CPU: $it%")
+                if (user == null) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@get
+                }
+
+                call.respond(User(user[Users.id], user[Users.name]))
             }
-        }
-    }
-    job.join()
+
+            get("/users") {
+                val users = transaction {
+                    Users.selectAll().map { row ->
+                        User(row[Users.id], row[Users.name])
+                    }
+                }
+                call.respond(users)
+            }
+            delete ("/users/{id}") {
+                val id = call.parameters["id"]?.toIntOrNull()
+                if (id == null) {
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@delete
+                }
+                val deleted = transaction {
+                    Users.deleteWhere { Users.id eq id }
+                }
+                if (deleted == 0) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@delete
+                }
+                call.respond(HttpStatusCode.NoContent)
+            }
+            put("/users/{id}") {
+                val id = call.parameters["id"]?.toIntOrNull()
+
+                if (id == null) {
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@put
+                }
+
+                val updated = call.receive<User>()
+
+                val updatedRows = transaction {
+                    Users.update({ Users.id eq id }) {
+                        it[name] = updated.name
+                    }
+                }
+
+                if (updatedRows == 0) {
+                    call.respond(HttpStatusCode.NotFound)
+                    return@put
+                }
+
+                call.respond(User(id, updated.name))
+            }
+
+            // 2. POST /users — в БД
+            post("/users") {
+                val newUser = call.receive<User>() // приходит id: 0, name: "Иван"
+                val created = transaction {
+                    val id = Users.insert {
+                        it[name] = newUser.name
+                        it[email] = "${newUser.name.lowercase()}@mail.ru" // временно
+                    } get Users.id
+                    User(id, newUser.name)
+                }
+                call.respond(created)
+            }}
+
+
+    }.start(wait = true)
 }
-
-
-
-
-
-
-
-
-
-
