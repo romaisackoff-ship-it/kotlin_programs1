@@ -8,8 +8,11 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
 fun connectToDatabase() {
+    val dbHost = System.getenv("DB_HOST") ?: "localhost"
+    val dbPort = System.getenv("DB_PORT") ?: "5433"
+
     val config = HikariConfig().apply {
-        jdbcUrl = "jdbc:postgresql://localhost:5433/mydb"
+        jdbcUrl = "jdbc:postgresql://$dbHost:$dbPort/mydb"
         username = "postgres"
         password = "secret"
         driverClassName = "org.postgresql.Driver"

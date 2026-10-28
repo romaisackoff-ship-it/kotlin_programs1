@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: my-postgres
+    environment:
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: mydb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck: # <--- ДОБАВИЛИ ЭТО
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mydb"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  ktor-app:
+    build: .
+    container_name: my-ktor-app
+    ports:
+      - "8081:8081"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy # <--- ЖДЕМ ГОТОВНОСТИ
+
+volumes:
+  postgres_data:

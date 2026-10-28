@@ -10,7 +10,13 @@ version = "1.0-SNAPSHOT"
 repositories {
     mavenCentral()
 }
-
+tasks.jar {
+    manifest {
+        attributes["Main-Class"] = "com.riokartus.MainKt"
+    }
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
 dependencies {
     // Ktor
     implementation("io.ktor:ktor-server-core:3.0.0")
@@ -28,6 +34,11 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-core:0.61.0")
     implementation("org.jetbrains.exposed:exposed-jdbc:0.61.0")
     implementation("org.jetbrains.exposed:exposed-java-time:0.61.0")
+
+    implementation("io.ktor:ktor-server-auth:3.0.0")
+    implementation("io.ktor:ktor-server-auth-jwt:3.0.0")
+    implementation("com.auth0:java-jwt:4.4.0")
+    implementation("org.mindrot:jbcrypt:0.4")
 }
 
 tasks.test {
