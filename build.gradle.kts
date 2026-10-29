@@ -19,6 +19,10 @@ tasks.jar {
 }
 dependencies {
     // Ktor
+    testImplementation(kotlin("test"))
+    testImplementation("io.ktor:ktor-server-test-host:3.0.0")
+    testImplementation("io.ktor:ktor-client-content-negotiation:3.0.0")
+    testImplementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
     implementation("io.ktor:ktor-server-core:3.0.0")
     implementation("io.ktor:ktor-server-netty:3.0.0")
     implementation("io.ktor:ktor-server-content-negotiation:3.0.0")
@@ -39,6 +43,7 @@ dependencies {
     implementation("io.ktor:ktor-server-auth-jwt:3.0.0")
     implementation("com.auth0:java-jwt:4.4.0")
     implementation("org.mindrot:jbcrypt:0.4")
+    implementation(kotlin("test"))
 }
 
 tasks.test {

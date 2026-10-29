@@ -1,0 +1,19 @@
+### Логин (сохраняет токен в переменную)
+POST http://127.0.0.1:8081/login
+Content-Type: application/json
+
+{
+  "email": "petr4@mail.ru",
+  "password": "secret12345"
+}
+
+> {%
+    client.global.set("auth_token", response.body.token);
+%}
+
+### Список пользователей (с токеном)
+GET http://127.0.0.1:8081/usersЫ
+Authorization: Bearer {{auth_token}}
+
+### Без токена (должно быть 401)
+GET http://127.0.0.1:8081/users
