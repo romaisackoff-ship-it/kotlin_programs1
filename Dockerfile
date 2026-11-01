@@ -1,12 +1,17 @@
 FROM eclipse-temurin:23-jdk
-# 2. Рабочая папка внутри контейнера
 WORKDIR /app
 
-# 3. Копируем весь проект в контейнер
-COPY . .
+# 1. Сначала копируем файлы сборки + сам скрипт gradlew
+COPY build.gradle.kts settings.gradle.kts gradle.properties gradlew ./
+COPY gradle ./gradle
 
-# 4. Собираем проект (создаём jar)
+# 2. Качаем зависимости (этот слой кэшируется)
+RUN chmod +x gradlew && ./gradlew dependencies
+
+# 3. Копируем остальной код
+COPY src ./src
+
+# 4. Собираем проект
 RUN ./gradlew build -x test
 
-# 5. Запускаем jar
 CMD ["java", "-jar", "build/libs/1gradle-practice-1.0-SNAPSHOT.jar"]

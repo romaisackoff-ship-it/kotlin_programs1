@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
+
 fun connectToDatabase() {
     val dbHost = System.getenv("DB_HOST") ?: "localhost"
     val dbPort = System.getenv("DB_PORT") ?: "5433"
@@ -34,6 +35,6 @@ fun printUsers() {
 }
 fun setupDatabase() {
     transaction {
-        SchemaUtils.create(Users)
+        SchemaUtils.create(Users, Posts, Comments)
     }
 }

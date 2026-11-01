@@ -41,7 +41,17 @@ data class LoginRequest(val email: String, val password: String)
 
 @Serializable
 data class LoginResponse(val token: String)
+@Serializable
+data class PostRequest(val title: String, val content: String)
 
+@Serializable
+data class PostResponse(
+    val id: Int,
+    val title: String,
+    val content: String,
+    val authorId: Int,
+    val createdAt: String // Для простоты строка
+)
 fun hashPassword(password: String): String =
     BCrypt.hashpw(password, BCrypt.gensalt())
 
@@ -111,7 +121,6 @@ fun Application.module() {
                 .sign(Algorithm.HMAC256(JWT_SECRET))
             call.respond(LoginResponse(token))
         }
-
         post("/register") {
             val data = call.receive<RegisterRequest>()
             val existing = transaction {
@@ -134,6 +143,28 @@ fun Application.module() {
         }
 
         authenticate("auth-jwt") {
+            post("/posts") {
+                val request = call.receive<PostRequest>()
+                val principal = call.principal<JWTPrincipal>()
+                val authorId = principal!!.payload.getClaim("userId").asInt()
+
+                val post = transaction {
+                    val id = Posts.insert {
+                        it[title] = request.title
+                        it[content] = request.content
+                        it[Posts.authorId] = authorId
+                    } get Posts.id
+
+                    PostResponse(
+                        id = id,
+                        title = request.title,
+                        content = request.content,
+                        authorId = authorId,
+                        createdAt = java.time.LocalDateTime.now().toString()
+                    )
+                }
+                call.respond(HttpStatusCode.Created, post)
+            }
             get("/users/{id}") {
                 val id = call.parameters["id"]?.toIntOrNull()
                 if (id == null) {

@@ -19,6 +19,7 @@ tasks.jar {
 }
 dependencies {
     // Ktor
+    implementation("org.jetbrains.exposed:exposed-java-time:0.61.0")
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:3.0.0")
     testImplementation("io.ktor:ktor-client-content-negotiation:3.0.0")

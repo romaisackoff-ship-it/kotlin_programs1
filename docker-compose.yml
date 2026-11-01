@@ -25,7 +25,11 @@ services:
       DB_PORT: 5432
     depends_on:
       postgres:
-        condition: service_healthy # <--- ЖДЕМ ГОТОВНОСТИ
+        condition: service_healthy
+    volumes:
+      - gradle_cache:/root/.gradle   # <--- ЭТО
+    # ...
 
 volumes:
   postgres_data:
+  gradle_cache:
