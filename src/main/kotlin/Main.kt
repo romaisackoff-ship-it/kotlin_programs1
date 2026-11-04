@@ -16,6 +16,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -51,6 +52,17 @@ data class PostResponse(
     val content: String,
     val authorId: Int,
     val createdAt: String // Для простоты строка
+)
+@Serializable
+data class CommentRequest(val content: String)
+
+@Serializable
+data class CommentResponse(
+    val id: Int,
+    val content: String,
+    val postId: Int,
+    val authorId: Int,
+    val createdAt: String
 )
 fun hashPassword(password: String): String =
     BCrypt.hashpw(password, BCrypt.gensalt())
@@ -141,8 +153,97 @@ fun Application.module() {
             }
             call.respond(HttpStatusCode.Created, created)
         }
+        get("/posts") {
+            val posts = transaction {
+                Posts.selectAll().map { row ->
+                    PostResponse(
+                        id = row[Posts.id],
+                        title = row[Posts.title],
+                        content = row[Posts.content],
+                        authorId = row[Posts.authorId],
+                        createdAt = row[Posts.createdAt].toString()
+                    )
+                }
+            }
+            call.respond(posts)
+        }
+        get("/posts/{id}/comments") {
+            val postId = call.parameters["id"]?.toIntOrNull()
+            if (postId == null) {
+                call.respond(HttpStatusCode.BadRequest, "Некорректный id")
+                return@get
+            }
+            val postExists = transaction {
+                Posts.selectAll().where { Posts.id eq postId }.firstOrNull()
+            }
+            if (postExists == null) {
+                call.respond(HttpStatusCode.NotFound, "Пост не найден")
+                return@get
+            }
 
+            val comments = transaction {
+                Comments.selectAll().where { Comments.postId eq postId }.map { row ->
+                    CommentResponse(
+                        id = row[Comments.id],
+                        content = row[Comments.content],
+                        postId = row[Comments.postId],
+                        authorId = row[Comments.authorId],
+                        createdAt = row[Comments.createdAt].toString()
+                    )
+                }
+            }
+            call.respond(comments)
+        }
+        get("/posts/{id}") {
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, "Некорректный id")
+                return@get
+            }
+            val post = transaction {
+                Posts.selectAll().where { Posts.id eq id }.firstOrNull()
+            }
+            if (post == null) {
+                call.respond(HttpStatusCode.NotFound, "Пост не найден")
+            } else {
+                call.respond(
+                    PostResponse(
+                        id = post[Posts.id],
+                        title = post[Posts.title],
+                        content = post[Posts.content],
+                        authorId = post[Posts.authorId],
+                        createdAt = post[Posts.createdAt].toString()
+                    )
+                )
+            }
+        }
         authenticate("auth-jwt") {
+            delete("/comments/{id}") {
+                val commentId = call.parameters["id"]?.toIntOrNull()
+                if (commentId == null) {
+                    call.respond(HttpStatusCode.BadRequest, "Некорректный id")
+                    return@delete
+                }
+                val principal = call.principal<JWTPrincipal>()
+                val currentUserId = principal!!.payload.getClaim("userId").asInt()
+                val comment = transaction {
+                    Comments.selectAll().where { Comments.id eq commentId }.firstOrNull()
+                }
+                if (comment == null) {
+                    call.respond(HttpStatusCode.NotFound, "Комментарий не найден")
+                    return@delete
+                }
+                val authorId = comment[Comments.authorId]
+                if (authorId != currentUserId) {
+                    call.respond(HttpStatusCode.Forbidden, "Можно удалять только свои комментарии")
+                    return@delete
+                }
+                transaction {
+                    Comments.deleteWhere { Comments.id eq commentId }
+                }
+                call.respond(HttpStatusCode.NoContent)
+            }
+
             post("/posts") {
                 val request = call.receive<PostRequest>()
                 val principal = call.principal<JWTPrincipal>()
@@ -165,6 +266,7 @@ fun Application.module() {
                 }
                 call.respond(HttpStatusCode.Created, post)
             }
+
             get("/users/{id}") {
                 val id = call.parameters["id"]?.toIntOrNull()
                 if (id == null) {
@@ -200,7 +302,41 @@ fun Application.module() {
                     call.respond(HttpStatusCode.NotFound, "Пользователь не найден")
                 }
             }
+            post("/posts/{id}/comments") {
+                val postId = call.parameters["id"]?.toIntOrNull()
+                if (postId == null) {
+                    call.respond(HttpStatusCode.BadRequest, "Некорректный id")
+                    return@post
+                }
+                val postExists = transaction {
+                    Posts.selectAll().where { Posts.id eq postId }.firstOrNull()
+                }
+                if (postExists == null) {
+                    call.respond(HttpStatusCode.NotFound, "Пост не найден")
+                    return@post
+                }
 
+                val request = call.receive<CommentRequest>()
+                val principal = call.principal<JWTPrincipal>()
+                val authorId = principal!!.payload.getClaim("userId").asInt()
+
+                val comment = transaction {
+                    val id = Comments.insert {
+                        it[content] = request.content
+                        it[Comments.postId] = postId
+                        it[Comments.authorId] = authorId
+                    } get Comments.id
+
+                    CommentResponse(
+                        id = id,
+                        content = request.content,
+                        postId = postId,
+                        authorId = authorId,
+                        createdAt = java.time.LocalDateTime.now().toString()
+                    )
+                }
+                call.respond(HttpStatusCode.Created, comment)
+            }
             post("/users") {
                 val newUser = call.receive<User>()
                 val created = transaction {
